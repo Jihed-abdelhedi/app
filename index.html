@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark" id="htmlRoot">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Carnet de croissance - Équipe (Cloud Supabase)</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              bg: '#111813',
+              card: '#16221A',
+              cardBorder: '#23382B',
+              green: '#4ADE80',
+              accent: '#34D399',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- React & ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <!-- Babel -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Supabase JS Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- XLSX Library -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- PptxGenJS Library -->
+  <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+</head>
+<body class="bg-[#111813] dark:bg-[#111813] text-slate-100 min-h-screen font-sans antialiased transition-colors duration-300" id="bodyTag">
+
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo } = React;
+
+    // --- COOKIES & LOCALSTORAGE HELPERS ---
+    const setCookie = (name, value, days = 365) => {
+      let expires = "";
+      if (days) {
+        const date = new Date();
+        date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+        expires = "; expires=" + date.toUTCString();
+      }
+      document.cookie = name + "=" + (encodeURIComponent(value) || "") + expires + "; path=/; SameSite=Lax";
+    };
+
+    const getCookie = (name) => {
+      const nameEQ = name + "=";
+      const ca = document.cookie.split(';');
+      for (let i = 0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+        if (c.indexOf(nameEQ) === 0) return decodeURIComponent(c.substring(nameEQ.length, c.length));
+      }
+      return null;
+    };
+
+    const getStoredValue = (key) => getCookie(key) || localStorage.getItem(key) || "";
+    const saveStoredValue = (key, value) => {
+      if (value) {
+        setCookie(key, value, 365);
+        localStorage.setItem(key, value);
+      }
+    };
+
+    const DEFAULT_SUPABASE_URL = getStoredValue("supabase_url");
+    const DEFAULT_SUPABASE_KEY = getStoredValue("supabase_key");
+
+    const INITIAL_DOMAINS_CONFIG = [
+      {
+        id: 1,
+        title: "1. Communication & Collaboration",
+        objective: "Assurer une communication claire et efficace avec l'équipe, les chefs de projet et les clients.",
+        skills: [
+          "Communication écrite et orale claire.",
+          "Remontée proactive des blocages.",
+          "Partage des informations importantes.",
+          "Participation active aux réunions.",
+          "Esprit d'équipe et entraide.",
+          "Transmission des connaissances aux autres membres."
+        ]
+      },
+      {
+        id: 2,
+        title: "2. Organisation & Gestion des priorités",
+        objective: "Respecter les engagements et gérer efficacement sa charge de travail.",
+        skills: [
+          "Organisation personnelle.",
+          "Gestion des priorités.",
+          "Respect des délais.",
+          "Mise à jour régulière des tâches (Taiga, Jira, etc.).",
+          "Anticipation des risques et dépendances.",
+          "Capacité à travailler sur plusieurs sujets simultanément."
+        ]
+      },
+      {
+        id: 3,
+        title: "3. Qualité & Responsabilité",
+        objective: "Garantir un travail fiable et limiter les régressions.",
+        skills: [
+          "Contrôle qualité avant livraison.",
+          "Vérification des impacts fonctionnels.",
+          "Documentation des actions réalisées.",
+          "Respect des processus de production.",
+          "Sens des responsabilités.",
+          "Capacité à assumer ses erreurs et proposer des solutions."
+        ]
+      },
+      {
+        id: 4,
+        title: "4. Autonomie & Prise d'initiative",
+        objective: "Développer l'autonomie tout en respectant le cadre défini.",
+        skills: [
+          "Recherche de solutions avant d'escalader.",
+          "Analyse des problèmes.",
+          "Force de proposition.",
+          "Capacité à prendre des décisions sur les sujets maîtrisés."
+        ]
+      },
+      {
+        id: 5,
+        title: "5. Problem solving",
+        objective: "Résoudre les problèmes efficacement.",
+        skills: [
+          "Analyse des causes racines.",
+          "Diagnostic méthodique.",
+          "Proposition de plusieurs solutions.",
+          "Évaluation des risques.",
+          "Capitalisation des retours d'expérience."
+        ]
+      },
+      {
+        id: 6,
+        title: "6. Compétences techniques métier",
+        objective: "Maîtriser les fondamentaux de la plateforme et des processus métier.",
+        skills: [
+          "Gestion de données (BDD, relations entités, analyse, cohérence).",
+          "Comptabilité & Facturation (Devis, commande, facture, avoir, TVA).",
+          "Produit / Klipso (BO, formulaires, exposants, campagnes, signalements)."
+        ],
+        skillCategories: {} 
+      },
+      {
+        id: 7,
+        title: "7. Suivi & Reporting",
+        objective: "Donner de la visibilité à l'équipe et à la direction.",
+        skills: [
+          "Reporting régulier.",
+          "Remontée des alertes.",
+          "Estimation des charges.",
+          "Suivi de l'avancement.",
+          "Respect des engagements annoncés."
+        ]
+      }
+    ];
+
+    const createDefaultRatings = (domainsConfig) => {
+      const ratings = {};
+      domainsConfig.forEach(d => {
+        d.skills.forEach(s => {
+          ratings[`${d.id}_${s}`] = 0;
+        });
+      });
+      return ratings;
+    };
+
+    const initialMembers = [
+      {
+        id: "lm",
+        name: "Léa Martin",
+        role: "Chef de projet",
+        department: "PROD",
+        initials: "LM",
+        ratings: createDefaultRatings(INITIAL_DOMAINS_CONFIG)
+      },
+      {
+        id: "yk",
+        name: "Yassine Karray",
+        role: "Support & Production",
+        department: "TMA",
+        initials: "YK",
+        ratings: createDefaultRatings(INITIAL_DOMAINS_CONFIG)
+      }
+    ];
+
+    function App() {
+      // --- GESTION DE LA SESSION & AUTHENTIFICATION (2 jours d'expiration) ---
+      const [isAuthenticated, setIsAuthenticated] = useState(() => {
+        const sessionData = sessionStorage.getItem("app_user_session");
+        if (!sessionData) return false;
+        try {
+          const parsed = JSON.parse(sessionData);
+          const now = new Date().getTime();
+          const twoDaysInMs = 2 * 24 * 60 * 60 * 1000;
+          // Vérification si la session a plus de 2 jours d'inactivité
+          if (now - parsed.timestamp > twoDaysInMs) {
+            sessionStorage.removeItem("app_user_session");
+            return false;
+          }
+          return true;
+        } catch (e) {
+          return false;
+        }
+      });
+
+      const [loginUser, setLoginUser] = useState("");
+      const [loginPass, setLoginPass] = useState("");
+      const [loginError, setLoginError] = useState("");
+
+      // Identifiants configurables par défaut (À modifier selon vos besoins)
+      const ADMIN_USER = "prod";
+      const ADMIN_PASS = "admin123";
+
+      const handleLogin = (e) => {
+        e.preventDefault();
+        if (loginUser === ADMIN_USER && loginPass === ADMIN_PASS) {
+          const sessionPayload = {
+            user: loginUser,
+            timestamp: new Date().getTime()
+          };
+          sessionStorage.setItem("app_user_session", JSON.stringify(sessionPayload));
+          setIsAuthenticated(true);
+          setLoginError("");
+        } else {
+          setLoginError("Identifiant ou mot de passe incorrect.");
+        }
+      };
+
+      const handleLogout = () => {
+        sessionStorage.removeItem("app_user_session");
+        setIsAuthenticated(false);
+      };
+
+      // Rafraîchir le timestamp de session à chaque interaction si authentifié
+      useEffect(() => {
+        if (isAuthenticated) {
+          const updateActivity = () => {
+            const sessionData = sessionStorage.getItem("app_user_session");
+            if (sessionData) {
+              try {
+                const parsed = JSON.parse(sessionData);
+                parsed.timestamp = new Date().getTime();
+                sessionStorage.setItem("app_user_session", JSON.stringify(parsed));
+              } catch (e) {}
+            }
+          };
+          window.addEventListener("click", updateActivity);
+          window.addEventListener("keypress", updateActivity);
+          return () => {
+            window.removeEventListener("click", updateActivity);
+            window.removeEventListener("keypress", updateActivity);
+          };
+        }
+      }, [isAuthenticated]);
+
+      const [isDarkMode, setIsDarkMode] = useState(() => {
+        const savedTheme = getStoredValue("app_theme");
+        return savedTheme ? savedTheme === "dark" : true;
+      });
+
+      useEffect(() => {
+        const rootEl = document.getElementById("htmlRoot");
+        const bodyEl = document.getElementById("bodyTag");
+        if (isDarkMode) {
+          rootEl.classList.add("dark");
+          bodyEl.style.backgroundColor = "#111813";
+          bodyEl.style.color = "#f1f5f9";
+          saveStoredValue("app_theme", "dark");
+        } else {
+          rootEl.classList.remove("dark");
+          bodyEl.style.backgroundColor = "#f8fafc";
+          bodyEl.style.color = "#0f172a";
+          saveStoredValue("app_theme", "light");
+        }
+      }, [isDarkMode]);
+
+      const [supabaseUrl, setSupabaseUrl] = useState(DEFAULT_SUPABASE_URL);
+      const [supabaseKey, setSupabaseKey] = useState(DEFAULT_SUPABASE_KEY);
+      const [supabaseClient, setSupabaseClient] = useState(null);
+      const [syncStatus, setSyncStatus] = useState("idle"); 
+      const [showSettings, setShowSettings] = useState(!DEFAULT_SUPABASE_URL);
+
+      const [domainsConfig, setDomainsConfig] = useState(INITIAL_DOMAINS_CONFIG);
+      const [members, setMembers] = useState(initialMembers);
+      
+      const [selectedDepartments, setSelectedDepartments] = useState(["ALL"]);
+
+      const [activeModal, setActiveModal] = useState(null);
+      const [editingMember, setEditingMember] = useState(null);
+
+      const [formName, setFormName] = useState("");
+      const [formRole, setFormRole] = useState("");
+      const [formDepartment, setFormDepartment] = useState("PROD");
+      const [formRatings, setFormRatings] = useState({});
+      const [openAccordion, setOpenAccordion] = useState(1);
+      const [newSkillInput, setNewSkillInput] = useState({});
+
+      const [showMetierModal, setShowMetierModal] = useState(false);
+      const [metierSkillName, setMetierSkillName] = useState("");
+      const [metierSkillCategory, setMetierSkillCategory] = useState("all");
+      const [editingMetierSkill, setEditingMetierSkill] = useState(null);
+
+      useEffect(() => {
+        if (isAuthenticated && supabaseUrl && supabaseKey) {
+          try {
+            const client = window.supabase.createClient(supabaseUrl, supabaseKey);
+            setSupabaseClient(client);
+            saveStoredValue("supabase_url", supabaseUrl);
+            saveStoredValue("supabase_key", supabaseKey);
+            fetchDataFromCloud(client);
+
+            const channel = client
+              .channel('app_state_changes')
+              .on('postgres_changes', { event: '*', schema: 'public', table: 'app_state' }, payload => {
+                if (payload.new && payload.new.content) {
+                  if (payload.new.content.members) setMembers(payload.new.content.members);
+                  if (payload.new.content.domainsConfig) setDomainsConfig(payload.new.content.domainsConfig);
+                }
+              })
+              .subscribe();
+
+            return () => { client.removeChannel(channel); };
+          } catch (e) {
+            console.error("Erreur de connexion Supabase:", e);
+            setSyncStatus("error");
+          }
+        } else {
+          setSyncStatus("idle");
+        }
+      }, [isAuthenticated, supabaseUrl, supabaseKey]);
+
+      const fetchDataFromCloud = async (client) => {
+        setSyncStatus("syncing");
+        try {
+          const { data, error } = await client.from('app_state').select('*').eq('id', 1).single();
+          if (data && data.content) {
+            if (data.content.members) setMembers(data.content.members);
+            if (data.content.domainsConfig) setDomainsConfig(data.content.domainsConfig);
+            setSyncStatus("connected");
+          } else if (error && error.code === 'PGRST116') {
+            await saveToCloud(client, initialMembers, INITIAL_DOMAINS_CONFIG);
+            setSyncStatus("connected");
+          } else {
+            setSyncStatus("connected");
+          }
+        } catch (e) {
+          console.error("Erreur de lecture Cloud:", e);
+          setSyncStatus("error");
+        }
+      };
+
+      const saveToCloud = async (clientInstance, updatedMembers, updatedDomains) => {
+        const client = clientInstance || supabaseClient;
+        if (!client) return;
+
+        setSyncStatus("syncing");
+        try {
+          const payload = {
+            members: updatedMembers || members,
+            domainsConfig: updatedDomains || domainsConfig
+          };
+          const { error } = await client.from('app_state').upsert({ id: 1, content: payload });
+          if (error) throw error;
+          setSyncStatus("connected");
+        } catch (e) {
+          console.error("Erreur de sauvegarde Supabase:", e);
+          setSyncStatus("error");
+        }
+      };
+
+      const getDomainSkillsForMember = (domain, member) => {
+        if (domain.id !== 6) return domain.skills;
+        const memberDept = (member.department || "PROD").toLowerCase();
+        const cats = domain.skillCategories || {};
+
+        return domain.skills.filter(s => {
+          const cat = (cats[s] || "all").toLowerCase();
+          return cat === "all" || cat === memberDept;
+        });
+      };
+
+      const calculateMemberDomainScore = (member, domainId) => {
+        const domain = domainsConfig.find(d => d.id === domainId);
+        if (!domain) return 0;
+        const activeSkills = getDomainSkillsForMember(domain, member);
+        if (activeSkills.length === 0) return 0;
+
+        let sum = 0;
+        activeSkills.forEach(s => {
+          sum += (member.ratings[`${domainId}_${s}`] || 0);
+        });
+        const max = activeSkills.length * 3;
+        return max > 0 ? Math.round((sum / max) * 100) : 0;
+      };
+
+      const calculateMemberGlobalScore = (member) => {
+        let totalSum = 0;
+        let totalMax = 0;
+        domainsConfig.forEach(d => {
+          const activeSkills = getDomainSkillsForMember(d, member);
+          activeSkills.forEach(s => {
+            totalSum += (member.ratings[`${d.id}_${s}`] || 0);
+            totalMax += 3;
+          });
+        });
+        return totalMax > 0 ? Math.round((totalSum / totalMax) * 100) : 0;
+      };
+
+      const globalStats = useMemo(() => {
+        if (members.length === 0) return { avgProgression: 0, masteredDomains: 0 };
+        let sumGlobal = 0;
+        let masteredCount = 0;
+
+        members.forEach(m => {
+          sumGlobal += calculateMemberGlobalScore(m);
+          domainsConfig.forEach(d => {
+            if (calculateMemberDomainScore(m, d.id) >= 80) {
+              masteredCount++;
+            }
+          });
+        });
+
+        return {
+          avgProgression: Math.round(sumGlobal / members.length),
+          masteredDomains: masteredCount
+        };
+      }, [members, domainsConfig]);
+
+      const filteredMembers = useMemo(() => {
+        if (selectedDepartments.includes("ALL") || selectedDepartments.length === 0) {
+          return members;
+        }
+        return members.filter(m => selectedDepartments.includes(m.department || "PROD"));
+      }, [members, selectedDepartments]);
+
+      const handleDepartmentFilterChange = (dept) => {
+        if (dept === "ALL") {
+          setSelectedDepartments(["ALL"]);
+        } else {
+          let updated;
+          if (selectedDepartments.includes("ALL")) {
+            updated = [dept];
+          } else if (selectedDepartments.includes(dept)) {
+            updated = selectedDepartments.filter(d => d !== dept);
+            if (updated.length === 0) updated = ["ALL"];
+          } else {
+            updated = [...selectedDepartments, dept];
+          }
+          setSelectedDepartments(updated);
+        }
+      };
+
+      const openAddModal = () => {
+        setFormName("");
+        setFormRole("");
+        setFormDepartment("PROD");
+        setFormRatings(createDefaultRatings(domainsConfig));
+        setOpenAccordion(1);
+        setActiveModal("ADD");
+      };
+
+      const openEditModal = (member) => {
+        setEditingMember(member);
+        setFormName(member.name);
+        setFormRole(member.role);
+        setFormDepartment(member.department || "PROD");
+        setFormRatings({ ...member.ratings });
+        setOpenAccordion(1);
+        setActiveModal("EDIT");
+      };
+
+      const handleSave = (e) => {
+        e.preventDefault();
+        if (!formName) return;
+
+        const initials = formName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) || "XX";
+        let newMembersList = [];
+
+        if (activeModal === "ADD") {
+          const newM = {
+            id: Date.now().toString(),
+            name: formName,
+            role: formRole,
+            department: formDepartment,
+            initials,
+            ratings: formRatings
+          };
+          newMembersList = [...members, newM];
+        } else if (activeModal === "EDIT") {
+          newMembersList = members.map(m => m.id === editingMember.id ? {
+            ...m,
+            name: formName,
+            role: formRole,
+            department: formDepartment,
+            initials,
+            ratings: formRatings
+          } : m);
+        }
+
+        setMembers(newMembersList);
+        saveToCloud(null, newMembersList, domainsConfig);
+        setActiveModal(null);
+      };
+
+      const handleDelete = (id) => {
+        if (confirm("Voulez-vous vraiment supprimer ce membre ?")) {
+          const filtered = members.filter(m => m.id !== id);
+          setMembers(filtered);
+          saveToCloud(null, filtered, domainsConfig);
+        }
+      };
+
+      const setRatingValue = (key, val) => {
+        setFormRatings(prev => ({ ...prev, [key]: val }));
+      };
+
+      const handleAddCustomSkill = (domainId) => {
+        const skillName = newSkillInput[domainId]?.trim();
+        if (!skillName) return;
+
+        const updatedDomains = domainsConfig.map(d => {
+          if (d.id === domainId && !d.skills.includes(skillName)) {
+            return { ...d, skills: [...d.skills, skillName] };
+          }
+          return d;
+        });
+
+        setDomainsConfig(updatedDomains);
+        setFormRatings(prev => ({ ...prev, [`${domainId}_${skillName}`]: 0 }));
+        setNewSkillInput(prev => ({ ...prev, [domainId]: "" }));
+
+        saveToCloud(null, members, updatedDomains);
+      };
+
+      const handleSaveMetierSkill = () => {
+        const name = metierSkillName.trim();
+        if (!name) return;
+
+        let updatedDomains;
+        let updatedMembers = [...members];
+
+        if (editingMetierSkill) {
+          const oldName = editingMetierSkill;
+          updatedDomains = domainsConfig.map(d => {
+            if (d.id === 6) {
+              const existingCats = d.skillCategories || {};
+              const newCats = { ...existingCats };
+              if (oldName !== name) {
+                delete newCats[oldName];
+              }
+              newCats[name] = metierSkillCategory;
+              
+              const newSkills = d.skills.map(s => s === oldName ? name : s);
+              if (!newSkills.includes(name)) {
+                newSkills.unshift(name);
+              }
+              return { ...d, skills: newSkills, skillCategories: newCats };
+            }
+            return d;
+          });
+
+          if (oldName !== name) {
+            updatedMembers = members.map(m => {
+              const newR = { ...m.ratings };
+              newR[`6_${name}`] = newR[`6_${oldName}`] || 0;
+              delete newR[`6_${oldName}`];
+              return { ...m, ratings: newR };
+            });
+          }
+        } else {
+          updatedDomains = domainsConfig.map(d => {
+            if (d.id === 6) {
+              const existingCats = d.skillCategories || {};
+              const newCats = { ...existingCats, [name]: metierSkillCategory };
+              const newSkills = [name, ...d.skills.filter(s => s !== name)];
+              return { ...d, skills: newSkills, skillCategories: newCats };
+            }
+            return d;
+          });
+
+          updatedMembers = members.map(m => {
+            const newR = { ...m.ratings, [`6_${name}`]: 0 };
+            return { ...m, ratings: newR };
+          });
+        }
+
+        setDomainsConfig(updatedDomains);
+        setMembers(updatedMembers);
+        setMetierSkillName("");
+        setMetierSkillCategory("all");
+        setEditingMetierSkill(null);
+
+        saveToCloud(null, updatedMembers, updatedDomains);
+      };
+
+      const handleStartEditMetierSkill = (skillName, currentCat) => {
+        setEditingMetierSkill(skillName);
+        setMetierSkillName(skillName);
+        setMetierSkillCategory(currentCat || "all");
+      };
+
+      const handleDeleteMetierSkill = (skillName) => {
+        if (!confirm(`Voulez-vous vraiment supprimer la compétence métier "${skillName}" ?`)) return;
+
+        const updatedDomains = domainsConfig.map(d => {
+          if (d.id === 6) {
+            const newCats = { ...(d.skillCategories || {}) };
+            delete newCats[skillName];
+            return { 
+              ...d, 
+              skills: d.skills.filter(s => s !== skillName),
+              skillCategories: newCats
+            };
+          }
+          return d;
+        });
+
+        const updatedMembers = members.map(m => {
+          const newR = { ...m.ratings };
+          delete newR[`6_${skillName}`];
+          return { ...m, ratings: newR };
+        });
+
+        setDomainsConfig(updatedDomains);
+        setMembers(updatedMembers);
+        if (editingMetierSkill === skillName) {
+          setEditingMetierSkill(null);
+          setMetierSkillName("");
+          setMetierSkillCategory("all");
+        }
+
+        saveToCloud(null, updatedMembers, updatedDomains);
+      };
+
+      const handleRemoveSkill = (domainId, skillName) => {
+        const updatedDomains = domainsConfig.map(d => {
+          if (d.id === domainId) {
+            const newCats = { ...(d.skillCategories || {}) };
+            delete newCats[skillName];
+            return { 
+              ...d, 
+              skills: d.skills.filter(s => s !== skillName),
+              skillCategories: newCats
+            };
+          }
+          return d;
+        });
+        setDomainsConfig(updatedDomains);
+        saveToCloud(null, members, updatedDomains);
+      };
+
+      const handleUpdateObjective = (domainId, newObjective) => {
+        const updatedDomains = domainsConfig.map(d => {
+          if (d.id === domainId) {
+            return { ...d, objective: newObjective };
+          }
+          return d;
+        });
+        setDomainsConfig(updatedDomains);
+        saveToCloud(null, members, updatedDomains);
+      };
+
+      const exportToExcel = () => {
+        const wb = XLSX.utils.book_new();
+        const summaryData = members.map(m => {
+          const row = {
+            "Membre": m.name,
+            "Rôle": m.role,
+            "Département": m.department || "PROD",
+            "Score Global (%)": `${calculateMemberGlobalScore(m)}%`
+          };
+          domainsConfig.forEach(d => {
+            row[d.title] = `${calculateMemberDomainScore(m, d.id)}%`;
+          });
+          return row;
+        });
+        const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+        XLSX.utils.book_append_sheet(wb, wsSummary, "Synthèse Équipe");
+
+        const detailData = [];
+        members.forEach(m => {
+          domainsConfig.forEach(d => {
+            const activeSkills = getDomainSkillsForMember(d, m);
+            activeSkills.forEach(s => {
+              const val = m.ratings[`${d.id}_${s}`] || 0;
+              const labels = ["0 - À développer", "1 - En progrès", "2 - Maîtrisé", "3 - Expert"];
+              detailData.push({
+                "Membre": m.name,
+                "Département": m.department || "PROD",
+                "Domaine": d.title,
+                "Compétence": s,
+                "Note (0-3)": val,
+                "Niveau": labels[val]
+              });
+            });
+          });
+        });
+        const wsDetail = XLSX.utils.json_to_sheet(detailData);
+        XLSX.utils.book_append_sheet(wb, wsDetail, "Détail Compétences");
+
+        XLSX.writeFile(wb, "Carnet_de_croissance_equipe.xlsx");
+      };
+
+      const exportToPPTX = () => {
+        const pptx = new PptxGenJS();
+        pptx.layout = 'LAYOUT_16x9';
+
+        let slideCover = pptx.addSlide();
+        slideCover.background = { color: "111813" };
+        slideCover.addText("Carnet de croissance", { x: 0.8, y: 1.5, fontSize: 32, bold: true, color: "4ADE80" });
+        slideCover.addText("Suivi des compétences et objectifs de l'équipe, par domaine", { x: 0.8, y: 2.3, fontSize: 16, color: "94A3B8" });
+
+        slideCover.addText(`${members.length}\nMembres suivis`, { x: 0.8, y: 3.5, w: 3, h: 1.5, align: "center", fill: { color: "16221A" }, color: "4ADE80", fontSize: 18 });
+        slideCover.addText(`${globalStats.avgProgression}%\nProgression moyenne`, { x: 4.2, y: 3.5, w: 3, h: 1.5, align: "center", fill: { color: "16221A" }, color: "4ADE80", fontSize: 18 });
+        slideCover.addText(`${globalStats.masteredDomains}\nDomaines maîtrisés (≥80%)`, { x: 7.6, y: 3.5, w: 3, h: 1.5, align: "center", fill: { color: "16221A" }, color: "4ADE80", fontSize: 18 });
+
+        let slideSynth = pptx.addSlide();
+        slideSynth.background = { color: "111813" };
+        slideSynth.addText("Vue d'ensemble de l'équipe", { x: 0.8, y: 0.6, fontSize: 24, bold: true, color: "4ADE80" });
+
+        const rows = [["Membre", "Rôle", "Département", "Score Global"]];
+        members.forEach(m => {
+          const score = calculateMemberGlobalScore(m);
+          rows.push([m.name, m.role, m.department || "PROD", `${score}%`]);
+        });
+
+        slideSynth.addTable(rows, {
+          x: 0.8, y: 1.5, w: 11,
+          border: { pt: 1, color: "23382B" },
+          fill: "16221A",
+          color: "FFFFFF",
+          fontSize: 14
+        });
+
+        pptx.writeFile({ fileName: "Carnet_de_croissance_equipe.pptx" });
+      };
+
+      const getDepartmentBadgeColor = (dept) => {
+        switch (dept) {
+          case 'TMA': return 'bg-purple-500/10 text-purple-400 border-purple-500/30';
+          case 'ONSITE': return 'bg-amber-500/10 text-amber-400 border-amber-500/30';
+          case 'PROD': default: return 'bg-sky-500/10 text-sky-400 border-sky-500/30';
+        }
+      };
+
+      // --- RENDU CONDITIONNEL DE LA PAGE DE LOGIN ---
+      if (!isAuthenticated) {
+        return (
+          <div className="min-h-screen bg-[#111813] flex items-center justify-center p-4">
+            <div className="bg-[#16221A] border border-[#23382B] rounded-2xl p-8 w-full max-w-md shadow-2xl space-y-6">
+              <div className="text-center space-y-2">
+                <h1 className="text-2xl font-bold text-[#4ADE80]">Connexion</h1>
+                <p className="text-xs text-slate-400">Veuillez vous identifier pour accéder au carnet de croissance.</p>
+              </div>
+
+              {loginError && (
+                <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-xs p-3 rounded-lg text-center">
+                  {loginError}
+                </div>
+              )}
+
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">Identifiant</label>
+                  <input 
+                    type="text" 
+                    required
+                    placeholder="admin"
+                    className="w-full bg-[#111813] border border-[#23382B] rounded-lg px-4 py-2.5 text-xs text-slate-100 outline-none focus:border-[#4ADE80]"
+                    value={loginUser}
+                    onChange={e => setLoginUser(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">Mot de passe</label>
+                  <input 
+                    type="password" 
+                    required
+                    placeholder="••••••••"
+                    className="w-full bg-[#111813] border border-[#23382B] rounded-lg px-4 py-2.5 text-xs text-slate-100 outline-none focus:border-[#4ADE80]"
+                    value={loginPass}
+                    onChange={e => setLoginPass(e.target.value)}
+                  />
+                </div>
+                <button 
+                  type="submit"
+                  className="w-full py-3 bg-[#4ADE80] hover:bg-[#22C55E] text-slate-950 font-bold text-xs uppercase tracking-wider rounded-lg shadow transition mt-2"
+                >
+                  Se connecter
+                </button>
+              </form>
+
+              
+            </div>
+          </div>
+        );
+      }
+
+      // --- APPLICATION PRINCIPALE ---
+      return (
+        <div className="max-w-7xl mx-auto px-6 py-8">
+          
+          {/* BARRE DE STATUT & BOUTON SWITCH THÈME + DÉCONNEXION */}
+          <div className="bg-[#16221A] dark:bg-[#16221A] bg-white border border-[#23382B] dark:border-[#23382B] border-slate-200 rounded-xl p-4 mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs shadow-sm">
+            <div className="flex items-center gap-3">
+              <span className={`w-3 h-3 rounded-full ${
+                syncStatus === 'connected' ? 'bg-emerald-400 animate-pulse' :
+                syncStatus === 'syncing' ? 'bg-amber-400 animate-ping' :
+                syncStatus === 'error' ? 'bg-red-500' : 'bg-slate-500'
+              }`}></span>
+              <div>
+                <span className="font-bold text-slate-800 dark:text-slate-200">Statut BDD Cloud : </span>
+                <span className="text-slate-600 dark:text-slate-400">
+                  {syncStatus === 'connected' ? 'Connecté & Synchro en temps réel' :
+                   syncStatus === 'syncing' ? 'Synchronisation...' :
+                   syncStatus === 'error' ? 'Erreur de connexion' : 'Non configuré (Local)'}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="flex items-center gap-2.5 bg-[#111813]/20 dark:bg-[#111813] px-3 py-1.5 rounded-lg border border-slate-300 dark:border-[#23382B]">
+                <span className="text-slate-700 dark:text-slate-300 font-medium">Thème :</span>
+                <button
+                  type="button"
+                  onClick={() => setIsDarkMode(!isDarkMode)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                    isDarkMode ? 'bg-[#4ADE80]' : 'bg-slate-400'
+                  }`}
+                  title="Basculer le mode clair/sombre"
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-slate-950 transition-transform ${
+                      isDarkMode ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+                <span className="text-slate-700 dark:text-slate-400 text-[11px] font-semibold w-12">
+                  {isDarkMode ? 'Sombre' : 'Clair'}
+                </span>
+              </div>
+
+              <button 
+                onClick={() => setShowSettings(!showSettings)} 
+                className="text-[#4ADE80] hover:underline font-semibold"
+              >
+                {showSettings ? "Masquer BDD ▲" : "⚙️ Paramètres BDD ▼"}
+              </button>
+
+              <button 
+                onClick={handleLogout}
+                className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg font-semibold transition"
+                title="Se déconnecter"
+              >
+                Déconnexion ⎋
+              </button>
+            </div>
+          </div>
+
+          {showSettings && (
+            <div className="bg-white dark:bg-[#111813] border border-slate-200 dark:border-[#23382B] rounded-xl p-5 mb-8 space-y-4 shadow-md">
+              <h3 className="font-bold text-sm text-emerald-600 dark:text-[#4ADE80]">Configuration de la connexion Supabase</h3>
+              <p className="text-xs text-slate-600 dark:text-slate-400">Entrez votre URL et votre clé (<code className="text-emerald-600 dark:text-emerald-300">anon / publishable key</code>).</p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Project URL</label>
+                  <input 
+                    type="text" 
+                    placeholder="https://xyzcompany.supabase.co" 
+                    className="w-full bg-slate-50 dark:bg-[#1A2E22] border border-slate-300 dark:border-[#23382B] rounded-lg px-3 py-2 text-xs text-slate-800 dark:text-slate-100 outline-none focus:border-[#4ADE80]"
+                    value={supabaseUrl}
+                    onChange={e => setSupabaseUrl(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Anon / Publishable Key</label>
+                  <input 
+                    type="password" 
+                    placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6..." 
+                    className="w-full bg-slate-50 dark:bg-[#1A2E22] border border-slate-300 dark:border-[#23382B] rounded-lg px-3 py-2 text-xs text-slate-800 dark:text-slate-100 outline-none focus:border-[#4ADE80]"
+                    value={supabaseKey}
+                    onChange={e => setSupabaseKey(e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Header principal */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+            <div>
+              <h1 className="text-3xl font-bold text-emerald-600 dark:text-[#4ADE80] tracking-tight">Carnet de croissance</h1>
+              <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">Suivi des compétences et objectifs de l'équipe, par domaine.</p>
+            </div>
+
+            <div className="flex items-center gap-3 flex-wrap">
+              <button 
+                onClick={exportToExcel}
+                className="px-4 py-2 rounded-lg bg-white dark:bg-[#16221A] hover:bg-slate-100 dark:hover:bg-[#23382B] text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-[#23382B] text-sm font-medium transition flex items-center gap-2 shadow-sm"
+              >
+                ↓ Excel
+              </button>
+              <button 
+                onClick={exportToPPTX}
+                className="px-4 py-2 rounded-lg bg-white dark:bg-[#16221A] hover:bg-slate-100 dark:hover:bg-[#23382B] text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-[#23382B] text-sm font-medium transition flex items-center gap-2 shadow-sm"
+              >
+                ↓ PowerPoint
+              </button>
+              <button 
+                onClick={() => {
+                  setEditingMetierSkill(null);
+                  setMetierSkillName("");
+                  setMetierSkillCategory("all");
+                  setShowMetierModal(true);
+                }}
+                className="px-4 py-2 rounded-lg bg-slate-800 dark:bg-[#23382B] hover:bg-slate-700 text-[#4ADE80] border border-[#4ADE80]/30 text-sm font-semibold transition shadow-md"
+              >
+                + Compétence Métier
+              </button>
+              <button 
+                onClick={openAddModal}
+                className="px-4 py-2 rounded-lg bg-[#4ADE80] hover:bg-[#22C55E] text-slate-950 text-sm font-semibold transition shadow-md"
+              >
+                + Ajouter un membre
+              </button>
+            </div>
+          </div>
+
+          {/* Stats Bar */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="bg-white dark:bg-[#16221A] border border-slate-200 dark:border-[#23382B] p-6 rounded-xl shadow-sm">
+              <div className="text-3xl font-bold text-emerald-600 dark:text-[#4ADE80]">{members.length}</div>
+              <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">Membres suivis</div>
+            </div>
+            <div className="bg-white dark:bg-[#16221A] border border-slate-200 dark:border-[#23382B] p-6 rounded-xl shadow-sm">
+              <div className="text-3xl font-bold text-emerald-600 dark:text-[#4ADE80]">{globalStats.avgProgression}%</div>
+              <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">Progression moyenne</div>
+            </div>
+            <div className="bg-white dark:bg-[#16221A] border border-slate-200 dark:border-[#23382B] p-6 rounded-xl shadow-sm">
+              <div className="text-3xl font-bold text-emerald-600 dark:text-[#4ADE80]">{globalStats.masteredDomains}</div>
+              <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">Domaines maîtrisés (≥80%)</div>
+            </div>
+          </div>
+
+          {/* BARRE DE FILTRE MULTI-SÉLECTION PAR DÉPARTEMENT */}
+          <div className="bg-white dark:bg-[#16221A] border border-slate-200 dark:border-[#23382B] rounded-xl p-4 mb-8 flex flex-wrap items-center gap-3 shadow-sm">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mr-2">Filtrer par département :</span>
+            
+            {["ALL", "PROD", "TMA", "ONSITE"].map(dept => {
+              const isSelected = selectedDepartments.includes(dept);
+              return (
+                <button
+                  key={dept}
+                  type="button"
+                  onClick={() => handleDepartmentFilterChange(dept)}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition border ${
+                    isSelected 
+                      ? "bg-[#4ADE80] text-slate-950 border-[#4ADE80] shadow" 
+                      : "bg-slate-50 dark:bg-[#111813] text-slate-600 dark:text-slate-300 border-slate-200 dark:border-[#23382B] hover:border-[#4ADE80]"
+                  }`}
+                >
+                  {dept === "ALL" ? "All" : dept}
+                </button>
+              );
+            })}
+
+            <span className="ml-auto text-xs text-slate-400">
+              {filteredMembers.length} affiché(s) sur {members.length}
+            </span>
+          </div>
+
+          {/* Member Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredMembers.map(member => {
+              const globalScore = calculateMemberGlobalScore(member);
+              const memberDept = member.department || "PROD";
+              return (
+                <div key={member.id} className="bg-white dark:bg-[#16221A] border border-slate-200 dark:border-[#23382B] rounded-2xl p-6 flex flex-col justify-between hover:border-[#34D399] transition duration-200 shadow-sm">
+                  <div>
+                    {/* Card Top Header */}
+                    <div className="flex items-start justify-between mb-6 pb-4 border-b border-slate-100 dark:border-[#23382B]">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-[#23382B] text-emerald-600 dark:text-[#4ADE80] font-bold text-lg flex items-center justify-center border border-slate-200 dark:border-[#34D399]/25 shrink-0">
+                          {member.initials}
+                        </div>
+                        <div>
+                          <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 leading-tight">{member.name}</h2>
+                          <div className="my-1">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${getDepartmentBadgeColor(memberDept)}`}>
+                              {memberDept}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">{member.role}</p>
+                        </div>
+                      </div>
+                      <span className="text-xl font-bold text-emerald-600 dark:text-[#4ADE80] shrink-0">{globalScore}%</span>
+                    </div>
+
+                    {/* Domains Progress List */}
+                    <div className="space-y-3">
+                      {domainsConfig.map(domain => {
+                        const dScore = calculateMemberDomainScore(member, domain.id);
+                        return (
+                          <div key={domain.id} className="flex justify-between items-center text-xs">
+                            <span className="text-slate-600 dark:text-slate-300 font-medium truncate pr-2">{domain.title}</span>
+                            <span className="text-emerald-600 dark:text-[#4ADE80] font-semibold">{dScore}%</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-4 border-t border-slate-100 dark:border-[#23382B] pt-4 mt-6 text-sm">
+                    <button 
+                      onClick={() => openEditModal(member)}
+                      className="text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-[#4ADE80] transition font-medium"
+                    >
+                      Modifier
+                    </button>
+                    <button 
+                      onClick={() => handleDelete(member.id)}
+                      className="text-slate-400 hover:text-red-400 transition font-medium"
+                    >
+                      Supprimer
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {filteredMembers.length === 0 && (
+            <div className="text-center py-12 text-slate-500 dark:text-slate-400 text-sm">
+              Aucun membre trouvé pour les départements sélectionnés.
+            </div>
+          )}
+
+          {/* POPUP DE GESTION DES COMPÉTENCES MÉTIER */}
+          {showMetierModal && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+              <div className="bg-white dark:bg-[#16221A] border border-slate-200 dark:border-[#23382B] w-full max-w-lg rounded-2xl p-6 shadow-2xl space-y-5 max-h-[90vh] flex flex-col">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-bold text-base text-slate-800 dark:text-slate-100">Gestion des Compétences Techniques Métier</h3>
+                  <button onClick={() => setShowMetierModal(false)} className="text-slate-400 hover:text-slate-700 dark:hover:text-white">✕</button>
+                </div>
+                
+                <div className="bg-slate-50 dark:bg-[#111813] p-4 rounded-xl border border-slate-200 dark:border-[#23382B] space-y-3">
+                  <h4 className="text-xs font-bold text-emerald-600 dark:text-[#4ADE80] uppercase tracking-wider">
+                    {editingMetierSkill ? `Modifier la compétence : "${editingMetierSkill}"` : "Ajouter une nouvelle compétence"}
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div className="sm:col-span-2">
+                      <input 
+                        type="text" 
+                        placeholder="Nom de la compétence..." 
+                        className="w-full bg-white dark:bg-[#1A2E22] border border-slate-300 dark:border-[#23382B] rounded-lg px-3 py-2 text-xs text-slate-800 dark:text-slate-100 outline-none focus:border-[#4ADE80]"
+                        value={metierSkillName}
+                        onChange={e => setMetierSkillName(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <select
+                        className="w-full bg-white dark:bg-[#1A2E22] border border-slate-300 dark:border-[#23382B] rounded-lg px-3 py-2 text-xs text-slate-800 dark:text-slate-100 outline-none focus:border-[#4ADE80] uppercase font-semibold"
+                        value={metierSkillCategory}
+                        onChange={e => setMetierSkillCategory(e.target.value)}
+                      >
+                        <option value="all">ALL</option>
+                        <option value="onsite">ONSITE</option>
+                        <option value="prod">PROD</option>
+                        <option value="tma">TMA</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2 pt-1">
+                    {editingMetierSkill && (
+                      <button 
+                        type="button" 
+                        onClick={() => {
+                          setEditingMetierSkill(null);
+                          setMetierSkillName("");
+                          setMetierSkillCategory("all");
+                        }} 
+                        className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-800 dark:hover:text-white transition"
+                      >
+                        Annuler
+                      </button>
+                    )}
+                    <button 
+                      type="button" 
+                      onClick={handleSaveMetierSkill}
+                      className="px-4 py-1.5 bg-[#4ADE80] hover:bg-[#22C55E] text-slate-950 text-xs font-semibold rounded-lg shadow transition"
+                    >
+                      {editingMetierSkill ? "Mettre à jour" : "Ajouter"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2 flex-1 overflow-y-auto pr-1">
+                  <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Compétences enregistrées ({domainsConfig.find(d => d.id === 6)?.skills.length || 0})</h4>
+                  
+                  <div className="space-y-2">
+                    {domainsConfig.find(d => d.id === 6)?.skills.map(skill => {
+                      const cat = domainsConfig.find(d => d.id === 6)?.skillCategories?.[skill] || "all";
+                      const isBeingEdited = editingMetierSkill === skill;
+
+                      return (
+                        <div key={skill} className={`flex items-center justify-between p-3 rounded-xl border text-xs transition ${isBeingEdited ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-slate-50 dark:bg-[#111813] border-slate-200 dark:border-[#23382B]'}`}>
+                          <div className="flex items-center gap-2.5 flex-1 pr-3">
+                            <span className="text-slate-800 dark:text-slate-200 font-medium">{skill}</span>
+                            <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold shrink-0">
+                              {cat}
+                            </span>
+                          </div>
+                          
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditMetierSkill(skill, cat)}
+                              className="px-2.5 py-1 text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-[#4ADE80] hover:bg-slate-200 dark:hover:bg-[#23382B] rounded transition font-medium"
+                            >
+                              Éditer
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteMetierSkill(skill)}
+                              className="px-2.5 py-1 text-slate-400 hover:text-red-500 hover:bg-slate-200 dark:hover:bg-[#23382B] rounded transition font-medium"
+                            >
+                              Supprimer
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2 border-t border-slate-200 dark:border-[#23382B]">
+                  <button 
+                    type="button" 
+                    onClick={() => setShowMetierModal(false)} 
+                    className="px-4 py-2 bg-slate-800 dark:bg-[#23382B] hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg shadow transition"
+                  >
+                    Fermer
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* MODAL (ADD / EDIT MEMBER) */}
+          {activeModal && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+              <div className="bg-white dark:bg-[#16221A] border border-slate-200 dark:border-[#23382B] w-full max-w-2xl rounded-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+                
+                <div className="p-6 border-b border-slate-200 dark:border-[#23382B] flex justify-between items-center">
+                  <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">
+                    {activeModal === "ADD" ? "Ajouter un membre" : `Modifier ${formName}`}
+                  </h2>
+                  <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-slate-700 dark:hover:text-white">✕</button>
+                </div>
+
+                <form id="memberForm" onSubmit={handleSave} className="p-6 overflow-y-auto space-y-6 flex-1 text-sm">
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Nom</label>
+                      <input 
+                        type="text" 
+                        required 
+                        placeholder="Ex. Léa Martin" 
+                        className="w-full bg-slate-50 dark:bg-[#1A2E22] border border-slate-300 dark:border-[#23382B] rounded-lg px-4 py-2.5 text-slate-800 dark:text-slate-100 outline-none focus:border-[#4ADE80]"
+                        value={formName} 
+                        onChange={e => setFormName(e.target.value)} 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Rôle</label>
+                      <input 
+                        type="text" 
+                        placeholder="Ex. Chef de projet" 
+                        className="w-full bg-slate-50 dark:bg-[#1A2E22] border border-slate-300 dark:border-[#23382B] rounded-lg px-4 py-2.5 text-slate-800 dark:text-slate-100 outline-none focus:border-[#4ADE80]"
+                        value={formRole} 
+                        onChange={e => setFormRole(e.target.value)} 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Département</label>
+                      <select
+                        className="w-full bg-slate-50 dark:bg-[#1A2E22] border border-slate-300 dark:border-[#23382B] rounded-lg px-4 py-2.5 text-slate-800 dark:text-slate-100 outline-none focus:border-[#4ADE80]"
+                        value={formDepartment}
+                        onChange={e => setFormDepartment(e.target.value)}
+                      >
+                        <option value="PROD">PROD</option>
+                        <option value="TMA">TMA</option>
+                        <option value="ONSITE">ONSITE</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 pt-2">
+                    {domainsConfig.map(domain => {
+                      const isOpen = openAccordion === domain.id;
+                      const dummyMember = { department: formDepartment, ratings: formRatings };
+                      const activeSkills = getDomainSkillsForMember(domain, dummyMember);
+
+                      let sum = 0;
+                      activeSkills.forEach(s => sum += (formRatings[`${domain.id}_${s}`] || 0));
+                      const max = activeSkills.length * 3;
+                      const scorePct = max > 0 ? Math.round((sum / max) * 100) : 0;
+
+                      return (
+                        <div key={domain.id} className="border border-slate-200 dark:border-[#23382B] rounded-xl overflow-hidden bg-slate-50 dark:bg-[#111813]">
+                          <div 
+                            onClick={() => setOpenAccordion(isOpen ? null : domain.id)}
+                            className="p-4 cursor-pointer flex justify-between items-center hover:bg-slate-100 dark:hover:bg-[#1A2E22] transition"
+                          >
+                            <div className="flex-1 pr-4">
+                              <h3 className="font-bold text-slate-800 dark:text-slate-100 text-base">{domain.title}</h3>
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{domain.objective}</p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="text-emerald-600 dark:text-[#4ADE80] font-bold">{scorePct}%</span>
+                              <span className="text-slate-400">{isOpen ? "▲" : "▼"}</span>
+                            </div>
+                          </div>
+
+                          {isOpen && (
+                            <div className="p-4 border-t border-slate-200 dark:border-[#23382B] space-y-4 bg-white dark:bg-[#16221A]">
+                              
+                              <div className="bg-slate-100 dark:bg-[#111813] p-3 rounded-lg border border-slate-200 dark:border-[#23382B] space-y-1">
+                                <label className="text-[10px] uppercase font-bold text-slate-400">Objectif du Domaine</label>
+                                <input 
+                                  type="text" 
+                                  className="w-full bg-transparent text-xs text-slate-700 dark:text-slate-300 outline-none"
+                                  value={domain.objective}
+                                  onChange={e => handleUpdateObjective(domain.id, e.target.value)}
+                                  placeholder="Modifier l'objectif..."
+                                />
+                              </div>
+
+                              <div className="space-y-3">
+                                {activeSkills.map(skill => {
+                                  const key = `${domain.id}_${skill}`;
+                                  const currentVal = formRatings[key] || 0;
+                                  const skillCat = domain.id === 6 ? (domain.skillCategories?.[skill] || "all") : null;
+
+                                  return (
+                                    <div key={skill} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100 dark:border-[#23382B]/50 last:border-0">
+                                      <div className="flex items-center justify-between sm:justify-start gap-2 flex-1 pr-2">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-slate-700 dark:text-slate-300 font-medium text-xs sm:text-sm">{skill}</span>
+                                          {skillCat && (
+                                            <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold">
+                                              {skillCat}
+                                            </span>
+                                          )}
+                                        </div>
+                                        {domain.id !== 6 && (
+                                          <button 
+                                            type="button"
+                                            onClick={() => handleRemoveSkill(domain.id, skill)}
+                                            className="text-slate-400 hover:text-red-500 text-xs px-1"
+                                            title="Supprimer"
+                                          >
+                                            ✕
+                                          </button>
+                                        )}
+                                      </div>
+                                      
+                                      <div className="flex items-center gap-1 bg-slate-100 dark:bg-[#111813] p-1 rounded-lg border border-slate-200 dark:border-[#23382B]">
+                                        {[0, 1, 2, 3].map(level => (
+                                          <button
+                                            key={level}
+                                            type="button"
+                                            onClick={() => setRatingValue(key, level)}
+                                            className={`w-7 h-7 rounded text-xs font-bold transition ${
+                                              currentVal === level 
+                                                ? "bg-[#4ADE80] text-slate-950 shadow" 
+                                                : "text-slate-500 hover:text-black dark:hover:text-white"
+                                            }`}
+                                          >
+                                            {level}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+
+                              {domain.id !== 6 && (
+                                <div className="pt-2 flex items-center gap-2">
+                                  <input 
+                                    type="text" 
+                                    placeholder="+ Ajouter une compétence..." 
+                                    className="flex-1 bg-slate-50 dark:bg-[#111813] border border-slate-200 dark:border-[#23382B] rounded-lg px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200 outline-none focus:border-[#4ADE80]"
+                                    value={newSkillInput[domain.id] || ""}
+                                    onChange={e => setNewSkillInput({ ...newSkillInput, [domain.id]: e.target.value })}
+                                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddCustomSkill(domain.id); }}}
+                                  />
+                                  <button 
+                                    type="button"
+                                    onClick={() => handleAddCustomSkill(domain.id)}
+                                    className="px-3 py-1.5 bg-slate-200 dark:bg-[#23382B] hover:bg-[#34D399] hover:text-slate-950 text-slate-800 dark:text-[#4ADE80] rounded-lg text-xs font-semibold transition"
+                                  >
+                                    Ajouter
+                                  </button>
+                                </div>
+                              )}
+
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                </form>
+
+                <div className="p-4 border-t border-slate-200 dark:border-[#23382B] flex justify-end gap-3 bg-slate-50 dark:bg-[#111813]">
+                  <button 
+                    type="button" 
+                    onClick={() => setActiveModal(null)} 
+                    className="px-4 py-2 text-sm text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white transition"
+                  >
+                    Annuler
+                  </button>
+                  <button 
+                    type="submit" 
+                    form="memberForm"
+                    className="px-5 py-2 bg-[#4ADE80] hover:bg-[#22C55E] text-slate-950 text-sm font-semibold rounded-lg shadow transition"
+                  >
+                    Enregistrer
+                  </button>
+                </div>
+
+              </div>
+            </div>
+          )}
+
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
